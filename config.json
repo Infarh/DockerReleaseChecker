@@ -1,0 +1,10 @@
+{
+  "check_interval_seconds": 3600,
+  "release_page_url": "https://docs.docker.com/desktop/release-notes/",
+  "css_selector_link": "a[href*='windows']",
+  "css_selector_version": "h2",
+  "version_pattern": "(\\d+\\.\\d+\\.\\d+)",
+  "download_path": "/downloads",
+  "filename_template": "DockerDesktop-{version}-windows.exe",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+}

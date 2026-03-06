@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  docker-release-checker:
+    build: .
+    container_name: docker-release-checker
+    restart: unless-stopped
+    volumes:
+      # Монтируем локальную директорию для скачанных файлов
+      - ./downloads:/downloads
+      # Монтируем конфигурацию в read-only режиме (можно редактировать на хосте)
+      - ./config.json:/app/config.json:ro
+    environment:
+      # Можно добавить переменные окружения при необходимости
+      - TZ=Europe/Moscow
+    # Ограничения ресурсов (опционально)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 512M

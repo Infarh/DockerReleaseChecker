@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+
+# Скачанные файлы (монтируются как volume)
+downloads/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Документация (не нужна внутри контейнера)
+README.md
+.github/
+
+# Logs
+*.log
