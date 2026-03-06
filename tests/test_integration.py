@@ -60,7 +60,7 @@ class TestIntegration:
         )
         
         # Мокируем скачивание файла
-        file_content = b"fake installer content for version 5.0.0"
+        file_content = b"MZfake installer content for version 5.0.0"
         responses.add(
             responses.GET,
             "https://example.com/downloads/app-5.0.0-windows.exe",
@@ -106,7 +106,7 @@ class TestIntegration:
         )
         
         # Мокируем скачивание нового файла
-        new_content = b"new version 5.0.0"
+        new_content = b"MZnew version 5.0.0"
         responses.add(
             responses.GET,
             "https://example.com/downloads/app-5.0.0-windows.exe",
@@ -216,9 +216,9 @@ class TestIntegration:
         responses.add(
             responses.GET,
             "https://example.com/downloads/app-5.0.0-windows.exe",
-            body=b"version 5.0.0",
+            body=b"MZversion 5.0.0",
             status=200,
-            headers={"content-length": "13"}
+            headers={"content-length": "15"}
         )
         
         # Запускаем проверку

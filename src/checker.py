@@ -62,8 +62,8 @@ class ReleaseChecker:
             
             soup = BeautifulSoup(response.text, 'lxml')
             
-            # Ищем ссылку на скачивание
-            link_element = soup.select_one(self._config.css_selector_link)
+            # Ищем наиболее релевантную ссылку на Windows-инсталлятор
+            link_element = self._find_best_download_link(soup)
             
             if not link_element:
                 self._logger.warning(f"Не найден элемент по селектору: {self._config.css_selector_link}")
@@ -89,6 +89,51 @@ class ReleaseChecker:
         except requests.RequestException as ex:
             self._logger.error(f"Ошибка при получении страницы релиза: {ex}")
             return None, None
+
+    def _find_best_download_link(self, Soup: BeautifulSoup):
+        """Находит лучшую ссылку на установщик Windows среди всех совпадений"""
+        elements = Soup.select(self._config.css_selector_link)
+
+        if elements:
+            best = max(elements, key=self._score_download_link)
+            if self._score_download_link(best) > 0:
+                return best
+
+        # Fallback: если селектор оказался слишком широким/неудачным, ищем по всем ссылкам
+        all_links = Soup.find_all('a', href=True)
+        if not all_links:
+            return None
+
+        best = max(all_links, key=self._score_download_link)
+        return best if self._score_download_link(best) > 0 else None
+
+    def _score_download_link(self, LinkElement) -> int:
+        """Оценивает ссылку: чем выше балл, тем вероятнее что это нужный installer"""
+        href = (LinkElement.get('href') or '').strip()
+        text = LinkElement.get_text(strip=True).lower()
+        href_lower = href.lower()
+
+        score = 0
+
+        # Максимально приоритетная ссылка: официальный Windows installer
+        if 'desktop.docker.com/win/' in href_lower and 'docker%20desktop%20installer.exe' in href_lower:
+            score += 100
+
+        # Альтернатива: любая exe-ссылка на windows
+        if '.exe' in href_lower:
+            score += 60
+
+        if '/win/' in href_lower or 'windows' in href_lower:
+            score += 30
+
+        # Снижаем приоритет ссылок документации
+        if 'docs.docker.com' in href_lower:
+            score -= 40
+
+        if 'windows' in text:
+            score += 10
+
+        return score
     
     def _extract_version_from_page(self, Soup: BeautifulSoup, LinkElement) -> Optional[str]:
         """Извлекает версию из страницы используя regex паттерн"""
@@ -171,13 +216,34 @@ class ReleaseChecker:
         try:
             response = self._session.get(Url, stream=True, timeout=60)
             response.raise_for_status()
+
+            content_type = (response.headers.get('content-type') or '').lower()
+            if 'text/html' in content_type:
+                raise ValueError(f"Ожидался бинарный файл, но получен HTML (Content-Type: {content_type})")
             
             total_size = int(response.headers.get('content-length', 0))
             downloaded_size = 0
             chunk_size = 8192
-            
+
+            chunk_iterator = response.iter_content(chunk_size=chunk_size)
+            first_chunk = b''
+            for chunk in chunk_iterator:
+                if chunk:
+                    first_chunk = chunk
+                    break
+
+            if not first_chunk:
+                raise ValueError("Скачанный файл пуст")
+
+            # PE-файл Windows должен начинаться с сигнатуры MZ
+            if not first_chunk.startswith(b'MZ'):
+                raise ValueError("Скачанный файл не похож на Windows PE-инсталлятор (нет сигнатуры MZ)")
+
             with open(file_path, 'wb') as file:
-                for chunk in response.iter_content(chunk_size=chunk_size):
+                file.write(first_chunk)
+                downloaded_size += len(first_chunk)
+
+                for chunk in chunk_iterator:
                     if chunk:
                         file.write(chunk)
                         downloaded_size += len(chunk)

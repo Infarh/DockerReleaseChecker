@@ -80,6 +80,31 @@ class TestReleaseChecker:
         
         assert version is None
         assert url is None
+
+    @responses.activate
+    def test_fetch_latest_release_prefers_windows_installer_link(self, mock_config):
+        """Тест выбора корректной exe-ссылки среди нескольких ссылок с 'windows'"""
+        html = """
+        <html><body>
+            <h2>Version 4.63.0</h2>
+            <a class="download" href="https://docs.docker.com/desktop/setup/install/windows-install/">Windows docs</a>
+            <a class="download" href="https://desktop.docker.com/win/main/amd64/220185/Docker%20Desktop%20Installer.exe?utm_source=docker">Windows</a>
+        </body></html>
+        """
+
+        mock_config._data['css_selector_link'] = "a[href*='windows']"
+        responses.add(
+            responses.GET,
+            "https://example.com/releases",
+            body=html,
+            status=200
+        )
+
+        checker = ReleaseChecker(mock_config)
+        version, url = checker._fetch_latest_release()
+
+        assert version == "4.63.0"
+        assert url.startswith("https://desktop.docker.com/win/main/amd64/220185/Docker%20Desktop%20Installer.exe")
     
     def test_extract_version_from_link_href(self, mock_config):
         """Тест извлечения версии из href ссылки"""
@@ -165,7 +190,7 @@ class TestReleaseChecker:
     @responses.activate
     def test_download_release_success(self, mock_config):
         """Тест успешного скачивания файла"""
-        file_content = b"fake installer content"
+        file_content = b"MZfake installer content"
         responses.add(
             responses.GET,
             "https://example.com/downloads/app-4.28.0-windows.exe",
@@ -199,6 +224,44 @@ class TestReleaseChecker:
         # Проверяем, что файл не был создан или был удален
         expected_file = Path(mock_config.download_path) / "app-4.28.0-windows.exe"
         assert not expected_file.exists()
+
+    @responses.activate
+    def test_download_release_rejects_html_content(self, mock_config):
+        """Тест отклонения загрузки, если вместо exe пришел HTML"""
+        responses.add(
+            responses.GET,
+            "https://example.com/downloads/app-4.28.0-windows.exe",
+            body="<html><body>Not an installer</body></html>",
+            status=200,
+            headers={"content-type": "text/html; charset=utf-8"}
+        )
+
+        checker = ReleaseChecker(mock_config)
+
+        with pytest.raises(ValueError):
+            checker._download_release("4.28.0", "https://example.com/downloads/app-4.28.0-windows.exe")
+
+        expected_file = Path(mock_config.download_path) / "app-4.28.0-windows.exe"
+        assert not expected_file.exists()
+
+    @responses.activate
+    def test_download_release_rejects_non_pe_binary(self, mock_config):
+        """Тест отклонения загрузки, если бинарник не имеет сигнатуру PE"""
+        responses.add(
+            responses.GET,
+            "https://example.com/downloads/app-4.28.0-windows.exe",
+            body=b"PK\x03\x04fake-zip-content",
+            status=200,
+            headers={"content-type": "application/octet-stream"}
+        )
+
+        checker = ReleaseChecker(mock_config)
+
+        with pytest.raises(ValueError):
+            checker._download_release("4.28.0", "https://example.com/downloads/app-4.28.0-windows.exe")
+
+        expected_file = Path(mock_config.download_path) / "app-4.28.0-windows.exe"
+        assert not expected_file.exists()
     
     @responses.activate
     def test_check_and_download_new_version(self, mock_config, sample_html_page):
@@ -215,9 +278,9 @@ class TestReleaseChecker:
         responses.add(
             responses.GET,
             "https://example.com/downloads/app-4.28.0-windows.exe",
-            body=b"fake installer",
+            body=b"MZfake installer",
             status=200,
-            headers={"content-length": "14"}
+            headers={"content-length": "16"}
         )
         
         checker = ReleaseChecker(mock_config)
