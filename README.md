@@ -152,6 +152,45 @@ docker-compose logs -f
 docker-compose down
 ```
 
+### Вариант 1.1: Запуск без docker-compose (через .cmd)
+
+В проекте есть готовые скрипты для Windows:
+
+```bat
+build.cmd
+start.cmd
+```
+
+`build.cmd` выполняет сборку образа:
+
+```bat
+docker build -t ghcr.io/infarh/docker-release-checker:latest .
+```
+
+`start.cmd` запускает контейнер с параметрами:
+- директория для скачивания релизов на хосте: `D:\!Downloads\Docker`
+- конфигурация на хосте: `D:\!Downloads\Docker\config.json`
+- проброс volume для релизов: `-v "D:\!Downloads\Docker:/downloads"`
+- проброс volume для конфигурации: `-v "D:\!Downloads\Docker\config.json:/app/config.json:ro"`
+- политика перезапуска: `--restart unless-stopped`
+
+Эквивалент прямого запуска `docker run`:
+
+```bat
+docker run -d ^
+  --name docker-release-checker ^
+  --restart unless-stopped ^
+  -v "D:\!Downloads\Docker:/downloads" ^
+  -v "D:\!Downloads\Docker\config.json:/app/config.json:ro" ^
+  ghcr.io/infarh/docker-release-checker:latest
+```
+
+Просмотр логов:
+
+```bat
+docker logs -f docker-release-checker
+```
+
 ### Вариант 2: Локальный запуск (для разработки)
 
 1. **Создайте виртуальное окружение:**
