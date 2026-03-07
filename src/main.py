@@ -46,8 +46,24 @@ def main() -> None:
             logger.info(f"  - Путь сохранения: {config.download_path}")
             logger.info(f"  - CSS селектор: {config.css_selector_link}")
             
-            # Создаем чекер и запускаем проверку
+            # Создаем чекер
             checker = ReleaseChecker(config)
+            
+            # Проверяем, сколько времени прошло с последней проверки
+            seconds_since_last = checker.get_seconds_since_last_check()
+            if seconds_since_last is not None:
+                logger.info(f"Время с последней проверки: {int(seconds_since_last)} сек ({int(seconds_since_last // 60)} мин)")
+                
+                # Если прошло слишком много времени (например, после перезагрузки)
+                if seconds_since_last > config.check_interval_seconds * 1.5:
+                    logger.warning(f"Пропущен интервал проверки! Должно быть {config.check_interval_seconds} сек, прошло {int(seconds_since_last)} сек")
+                else:
+                    # Вычисляем оставшееся время до следующей проверки
+                    remaining_time = config.check_interval_seconds - seconds_since_last
+                    if remaining_time > 0:
+                        logger.info(f"До следующей проверки осталось {int(remaining_time)} сек. Ожидание...")
+                        time.sleep(remaining_time)
+            
             logger.info("-" * 60)
             logger.info("Начало проверки новых релизов...")
             

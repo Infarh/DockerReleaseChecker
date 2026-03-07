@@ -1,6 +1,8 @@
 """Модуль для проверки новых релизов Docker Desktop и их скачивания"""
 import re
+import json
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin
@@ -15,15 +17,22 @@ from .config import Config
 class ReleaseChecker:
     """Класс для мониторинга и скачивания новых релизов Docker Desktop"""
     
+    # Имя файла для хранения времени последней проверки
+    _TIMESTAMP_FILE = '.last_check_timestamp.json'
+    
     def __init__(self, Config: Config):
         self._config = Config
         self._logger = logging.getLogger(__name__)
         self._session = requests.Session()
         self._session.headers.update({'User-Agent': self._config.user_agent})
+        self._timestamp_path = Path(self._config.download_path) / self._TIMESTAMP_FILE
     
     def check_and_download(self) -> None:
         """Основной метод: проверяет наличие нового релиза и скачивает его при необходимости"""
         try:
+            # Сохраняем время начала проверки
+            self._save_check_timestamp()
+            
             # Получаем информацию о релизе с сайта
             latest_version, download_url = self._fetch_latest_release()
             
@@ -53,6 +62,38 @@ class ReleaseChecker:
             
         except Exception as ex:
             self._logger.error(f"Ошибка при проверке релиза: {ex}", exc_info=True)
+    
+    def get_seconds_since_last_check(self) -> Optional[float]:
+        """Возвращает количество секунд с момента последней проверки или None, если это первая проверка"""
+        last_check_time = self._load_check_timestamp()
+        if last_check_time is None:
+            return None
+        return time.time() - last_check_time
+    
+    def _save_check_timestamp(self) -> None:
+        """Сохраняет время текущей проверки в файл"""
+        try:
+            timestamp_dir = self._timestamp_path.parent
+            timestamp_dir.mkdir(parents=True, exist_ok=True)
+            
+            data = {'last_check_time': time.time()}
+            with open(self._timestamp_path, 'w', encoding='utf-8') as file:
+                json.dump(data, file)
+        except Exception as ex:
+            self._logger.warning(f"Не удалось сохранить timestamp: {ex}")
+    
+    def _load_check_timestamp(self) -> Optional[float]:
+        """Загружает время последней проверки из файла"""
+        try:
+            if not self._timestamp_path.exists():
+                return None
+            
+            with open(self._timestamp_path, 'r', encoding='utf-8') as file:
+                data = json.load(file)
+                return data.get('last_check_time')
+        except Exception as ex:
+            self._logger.warning(f"Не удалось загрузить timestamp: {ex}")
+            return None
     
     def _fetch_latest_release(self) -> tuple[Optional[str], Optional[str]]:
         """Получает информацию о последнем релизе со страницы"""
@@ -222,6 +263,9 @@ class ReleaseChecker:
                 raise ValueError(f"Ожидался бинарный файл, но получен HTML (Content-Type: {content_type})")
             
             total_size = int(response.headers.get('content-length', 0))
+            if total_size > 0:
+                self._logger.info(f"Размер файла: {total_size // (1024*1024)} МБ")
+            
             downloaded_size = 0
             chunk_size = 8192
 
@@ -253,11 +297,19 @@ class ReleaseChecker:
                             progress = (downloaded_size / total_size) * 100
                             self._logger.info(f"Прогресс: {progress:.1f}% ({downloaded_size // (1024*1024)} МБ / {total_size // (1024*1024)} МБ)")
             
-            self._logger.info(f"Файл успешно сохранен: {file_path}")
+            # Проверяем целостность загрузки
+            if total_size > 0 and downloaded_size != total_size:
+                raise ValueError(f"Размер загруженного файла ({downloaded_size} байт) не совпадает с ожидаемым ({total_size} байт)")
             
-        except requests.RequestException as ex:
+            self._logger.info(f"Файл успешно сохранен: {file_path} ({downloaded_size // (1024*1024)} МБ)")
+            
+        except Exception as ex:
             self._logger.error(f"Ошибка при скачивании файла: {ex}")
-            # Удаляем неполный файл
+            # Удаляем битый/неполный файл при любой ошибке
             if file_path.exists():
-                file_path.unlink()
+                try:
+                    file_path.unlink()
+                    self._logger.info(f"Битый файл удалён: {file_path}")
+                except Exception as unlink_ex:
+                    self._logger.warning(f"Не удалось удалить битый файл {file_path}: {unlink_ex}")
             raise
