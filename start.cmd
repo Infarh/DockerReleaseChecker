@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "IMAGE_NAME=ghcr.io/infarh/docker-release-checker"
+set "IMAGE_NAME=infarh/docker-release-checker"
 set "IMAGE_TAG=latest"
 set "CONTAINER_NAME=docker-release-checker"
 set "DOWNLOAD_DIR=D:\!Downloads\Docker"
@@ -24,6 +24,11 @@ echo [INFO] Starting container %CONTAINER_NAME%...
 docker run -d ^
   --name %CONTAINER_NAME% ^
   --restart unless-stopped ^
+    --health-cmd "python -m src.healthcheck" ^
+    --health-interval 2m ^
+    --health-timeout 10s ^
+    --health-start-period 30s ^
+    --health-retries 3 ^
   -v "%DOWNLOAD_DIR%:/downloads" ^
   -v "%CONFIG_FILE%:/app/config.json:ro" ^
   %IMAGE_NAME%:%IMAGE_TAG%
