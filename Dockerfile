@@ -1,5 +1,5 @@
 # Этап 1: выполнение тестов; при падении тестов сборка прерывается
-FROM python:3.11-slim AS test
+FROM python:3.14.3-slim AS test
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
@@ -19,7 +19,7 @@ COPY pytest.ini ./
 RUN pytest -q && touch /tmp/.tests-passed
 
 # Этап 2: финальный runtime-образ
-FROM python:3.11-slim AS runtime
+FROM python:3.14.3-slim AS runtime
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
@@ -42,6 +42,14 @@ RUN mkdir -p /downloads
 
 # Объявляем volume для скачанных файлов
 VOLUME ["/downloads"]
+
+# Настраиваем health check для мониторинга работоспособности контейнера
+# - интервал: проверка каждые 2 минуты
+# - timeout: таймаут команды проверки 10 секунд
+# - start-period: 30 секунд на инициализацию приложения
+# - retries: 3 неудачные попытки подряд для статуса unhealthy
+HEALTHCHECK --interval=2m --timeout=10s --start-period=30s --retries=3 \
+    CMD python -m src.healthcheck || exit 1
 
 # Запускаем приложение с unbuffered выводом для логов
 CMD ["python", "-u", "-m", "src.main"]

@@ -13,6 +13,12 @@ services:
     environment:
       # Можно добавить переменные окружения при необходимости
       - TZ=Europe/Moscow
+    healthcheck:
+      test: ["CMD", "python", "-m", "src.healthcheck"]
+      interval: 2m
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     # Ограничения ресурсов (опционально)
     # deploy:
     #   resources:
